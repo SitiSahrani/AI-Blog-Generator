@@ -4,7 +4,14 @@ from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
+from django.conf import settings
 import json
+from pytube import YouTube
+import os
+import assemblyai as aai
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Create your views here.
 @login_required
@@ -17,12 +24,18 @@ def generate_blog(request):
         try:
             data = json.loads(request.body)
             yt_link = data['link']
+           
         except (KeyError, json.JSONDecodeError):
             return JsonResponse({'error': 'Invalid data sent'}, status=400)
 
         # get yt title
+        title = yt_title(yt_link)
 
         # get transcript
+        transcription = get_transcription
+        if not transcription:
+            return JsonResponse({'error':"Failed to get transcript"}, status=500)
+        
 
         # use OpenAI to generate the blog
 
@@ -31,6 +44,30 @@ def generate_blog(request):
         # return blog article as a response
     else:
         return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+def yt_title(link):
+    yt=YouTube(link)
+    title=yt.title
+    return title
+
+def download_audio(link):
+    yt=YouTube(link)
+    video = yt.streams.filter(only_audio=True).first()
+    out_file = video.download(output_path=settings.MEDIA_ROOT)
+    base, ext = os.path.splitext(out_file)
+    new_file=base+'.mp3' 
+    os.rename(out_file, new_file)
+    return new_file
+
+def get_transcription(link):
+    audio_file=download_audio(link)
+    api_key=os.getenv('ASSEMBLYAI_API_KEY')
+    aai.settings.api_key= api_key
+
+    transcriber = aai.Transcriber()
+    transcript = transcriber.transcribe(audio_file)
+
+    return transcriber.text
 
 def user_login(request):
     if request.method == 'POST':
