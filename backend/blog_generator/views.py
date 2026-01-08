@@ -9,6 +9,7 @@ import json
 from pytube import YouTube
 import os
 import assemblyai as aai
+import openai
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -35,13 +36,17 @@ def generate_blog(request):
         transcription = get_transcription
         if not transcription:
             return JsonResponse({'error':"Failed to get transcript"}, status=500)
-        
 
         # use OpenAI to generate the blog
+        blog_content=generate_blog_from_transcription(transcription)
+        if not blog_content:
+            return JsonResponse({'error':"Failed to generate blog article"}, status=500)
 
         # save blog article to database
 
         # return blog article as a response
+        return JsonResponse({'content': blog_content}) 
+
     else:
         return JsonResponse({'error': 'Invalid request method'}, status=405)
 
@@ -61,13 +66,29 @@ def download_audio(link):
 
 def get_transcription(link):
     audio_file=download_audio(link)
-    api_key=os.getenv('ASSEMBLYAI_API_KEY')
-    aai.settings.api_key= api_key
+    api_key1=os.getenv('ASSEMBLYAI_API_KEY')
+    aai.settings.api_key= api_key1
 
     transcriber = aai.Transcriber()
     transcript = transcriber.transcribe(audio_file)
 
     return transcriber.text
+
+def generate_blog_from_transcription(transcription):
+    api_key2=os.getenv('OPENAI_API_KEY')
+    openai.api_key=api_key2
+
+    promt = f"Based on the following transcript from a YouTube video, write a comprehensive blog article, write it based on the transcript, but dont make it look like a youtube video, make it look like a proper blog article:\n\n{transcription}\n\nArticle:"
+
+    response=openai.completion.create(
+        model="text-davinci-003",
+        promt=promt,
+        max_tokens=1000
+    )
+
+    generated_content = response.choices[0].text.strip()
+
+    return generated_content
 
 def user_login(request):
     if request.method == 'POST':
