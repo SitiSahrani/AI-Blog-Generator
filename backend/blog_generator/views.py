@@ -18,11 +18,11 @@ from dotenv import load_dotenv
 # ================= ENV =================
 load_dotenv()
 
-ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+# ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY")
+# GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-client = genai.Client(api_key=GEMINI_API_KEY)
-aai.settings.api_key = ASSEMBLYAI_API_KEY
+# client = genai.Client(api_key=GEMINI_API_KEY)
+# aai.settings.api_key = ASSEMBLYAI_API_KEY
 
 
 # ================= PAGE =================
@@ -110,6 +110,8 @@ def download_audio(url):
 
 # ================= TRANSCRIBE =================
 def transcribe_audio(path):
+    ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY")
+    aai.settings.api_key = ASSEMBLYAI_API_KEY
     try:
         transcriber = aai.Transcriber()
         transcript = transcriber.transcribe(path)
@@ -121,6 +123,7 @@ def transcribe_audio(path):
 
 # ================= GEMINI =================
 def generate_blog_text(transcript, title):
+    
     try:
         prompt = f"""
                 Based on the following transcript from a YouTube video, write a comprehensive blog article, write it based on the transcript, but dont make it look like a youtube video, make it look like a proper blog article
@@ -136,7 +139,8 @@ def generate_blog_text(transcript, title):
                 Transcript:
                 {transcript}
                 """
-
+        GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+        client = genai.Client(api_key=GEMINI_API_KEY)
         response = client.models.generate_content(
             model="gemini-3-flash-preview",
             contents=prompt,
