@@ -1,12 +1,16 @@
-# Virtual environment
+# Virtual env
 venv/
 
-# Environment variables
+# Env vars
 .env
-
-# Python cache
-__pycache__/
-*.pyc
 
 # Django
 db.sqlite3
+__pycache__/
+
+# Media / downloads
+media/
+*.mp3
+*.wav
+*.webm
+*.m4a
