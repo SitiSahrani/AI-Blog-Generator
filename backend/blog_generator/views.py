@@ -12,6 +12,7 @@ from django.conf import settings
 import yt_dlp
 import assemblyai as aai
 from google import genai
+from .models import BlogPost
 from dotenv import load_dotenv
 
 # ================= ENV =================
@@ -43,20 +44,33 @@ def generate_blog(request):
         if not url:
             return JsonResponse({"error": "YouTube link required"}, status=400)
 
+        #get youtube_title
         title = get_youtube_title(url)
         audio_path = download_audio(url)
 
         if not title or not audio_path:
             return JsonResponse({"error": "Failed to process YouTube video"}, status=500)
 
+        #get transcript
         transcript = transcribe_audio(audio_path)
         if not transcript:
             return JsonResponse({"error": "Transcription failed"}, status=500)
 
+        #use Gemini to generate the blog
         blog = generate_blog_text(transcript, title)
         if not blog:
             return JsonResponse({"error": "Blog generation failed"}, status=500)
 
+        # save blog article to database
+        new_blog_article = BlogPost.objects.create(
+            user=request.user,
+            youtube_title=title,
+            youtube_link=url,
+            generated_content=blog,
+        )
+        new_blog_article.save()
+
+        # return blog article as a response
         return JsonResponse({"content": blog})
 
     except Exception as e:
@@ -134,6 +148,18 @@ def generate_blog_text(transcript, title):
         print("GEMINI ERROR:", e)
         return None
 
+# ================= BLOG =================
+def blog_list(request):
+    blog_articles = BlogPost.objects.filter(user=request.user)
+    return render(request, "all-blogs.html", {'blog_articles': blog_articles})
+
+def blog_details(request, pk):
+    blog_article_detail = BlogPost.objects.get(id=pk)
+    if request.user == blog_article_detail.user:
+        return render(request, 'blog-details.html', {'blog_article_detail': blog_article_detail})
+    else:
+        return redirect('/')
+
 
 # ================= AUTH =================
 def user_login(request):
@@ -164,4 +190,4 @@ def user_signup(request):
 
 def user_logout(request):
     logout(request)
-    return redirect("/login/")
+    return redirect("/login")
