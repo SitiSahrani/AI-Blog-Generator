@@ -10,7 +10,7 @@ __pycache__/
 
 # Media / downloads
 media/
-*.mp3
-*.wav
-*.webm
-*.m4a
+.mp3
+.wav
+.webm
+.m4a
