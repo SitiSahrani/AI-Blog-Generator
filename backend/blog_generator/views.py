@@ -1,134 +1,167 @@
-from django.contrib.auth.models import User
-from django.contrib.auth import authenticate, login, logout
-from django.shortcuts import render, redirect
-from django.contrib.auth.decorators import login_required
-from django.views.decorators.csrf import csrf_exempt
-from django.http import JsonResponse
-from django.conf import settings
 import json
-from pytube import YouTube
 import os
+
+from django.shortcuts import render, redirect
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.models import User
+from django.conf import settings
+
+import yt_dlp
 import assemblyai as aai
-import openai
+from google import genai
 from dotenv import load_dotenv
 
+# ================= ENV =================
 load_dotenv()
 
-# Create your views here.
+ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+client = genai.Client(api_key=GEMINI_API_KEY)
+aai.settings.api_key = ASSEMBLYAI_API_KEY
+
+
+# ================= PAGE =================
 @login_required
 def index(request):
-    return render(request, 'index.html')
+    return render(request, "index.html")
 
+
+# ================= API =================
 @csrf_exempt
 def generate_blog(request):
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            yt_link = data['link']
-           
-        except (KeyError, json.JSONDecodeError):
-            return JsonResponse({'error': 'Invalid data sent'}, status=400)
+    if request.method != "POST":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
 
-        # get yt title
-        title = yt_title(yt_link)
+    try:
+        body = json.loads(request.body)
+        url = body.get("link")
 
-        # get transcript
-        transcription = get_transcription
-        if not transcription:
-            return JsonResponse({'error':"Failed to get transcript"}, status=500)
+        if not url:
+            return JsonResponse({"error": "YouTube link required"}, status=400)
 
-        # use OpenAI to generate the blog
-        blog_content=generate_blog_from_transcription(transcription)
-        if not blog_content:
-            return JsonResponse({'error':"Failed to generate blog article"}, status=500)
+        title = get_youtube_title(url)
+        audio_path = download_audio(url)
 
-        # save blog article to database
+        if not title or not audio_path:
+            return JsonResponse({"error": "Failed to process YouTube video"}, status=500)
 
-        # return blog article as a response
-        return JsonResponse({'content': blog_content}) 
+        transcript = transcribe_audio(audio_path)
+        if not transcript:
+            return JsonResponse({"error": "Transcription failed"}, status=500)
 
-    else:
-        return JsonResponse({'error': 'Invalid request method'}, status=405)
+        blog = generate_blog_text(transcript, title)
+        if not blog:
+            return JsonResponse({"error": "Blog generation failed"}, status=500)
 
-def yt_title(link):
-    yt=YouTube(link)
-    title=yt.title
-    return title
+        return JsonResponse({"content": blog})
 
-def download_audio(link):
-    yt=YouTube(link)
-    video = yt.streams.filter(only_audio=True).first()
-    out_file = video.download(output_path=settings.MEDIA_ROOT)
-    base, ext = os.path.splitext(out_file)
-    new_file=base+'.mp3' 
-    os.rename(out_file, new_file)
-    return new_file
+    except Exception as e:
+        print("SERVER ERROR:", e)
+        return JsonResponse({"error": "Internal server error"}, status=500)
 
-def get_transcription(link):
-    audio_file=download_audio(link)
-    api_key1=os.getenv('ASSEMBLYAI_API_KEY')
-    aai.settings.api_key= api_key1
 
-    transcriber = aai.Transcriber()
-    transcript = transcriber.transcribe(audio_file)
+# ================= YOUTUBE =================
+def get_youtube_title(url):
+    try:
+        with yt_dlp.YoutubeDL({"quiet": True}) as ydl:
+            info = ydl.extract_info(url, download=False)
+            return info.get("title")
+    except Exception as e:
+        print("TITLE ERROR:", e)
+        return None
 
-    return transcriber.text
 
-def generate_blog_from_transcription(transcription):
-    api_key2=os.getenv('OPENAI_API_KEY')
-    openai.api_key=api_key2
+def download_audio(url):
+    try:
+        os.makedirs(settings.MEDIA_ROOT, exist_ok=True)
 
-    promt = f"Based on the following transcript from a YouTube video, write a comprehensive blog article, write it based on the transcript, but dont make it look like a youtube video, make it look like a proper blog article:\n\n{transcription}\n\nArticle:"
+        ydl_opts = {
+            "format": "bestaudio",
+            "outtmpl": os.path.join(settings.MEDIA_ROOT, "%(id)s.%(ext)s"),
+            "quiet": True,
+        }
 
-    response=openai.completion.create(
-        model="text-davinci-003",
-        promt=promt,
-        max_tokens=1000
-    )
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            return ydl.prepare_filename(info)
 
-    generated_content = response.choices[0].text.strip()
+    except Exception as e:
+        print("DOWNLOAD ERROR:", e)
+        return None
 
-    return generated_content
 
+# ================= TRANSCRIBE =================
+def transcribe_audio(path):
+    try:
+        transcriber = aai.Transcriber()
+        transcript = transcriber.transcribe(path)
+        return transcript.text
+    except Exception as e:
+        print("TRANSCRIBE ERROR:", e)
+        return None
+
+
+# ================= GEMINI =================
+def generate_blog_text(transcript, title):
+    try:
+        prompt = f"""
+                Based on the following transcript from a YouTube video, write a comprehensive blog article, write it based on the transcript, but dont make it look like a youtube video, make it look like a proper blog article
+
+                Title: {title}
+
+                Rules:
+                - Do NOT mention YouTube or video
+                - Use headings and paragraphs
+                - Clear explanation
+                - Formal blog style
+
+                Transcript:
+                {transcript}
+                """
+
+        response = client.models.generate_content(
+            model="gemini-3-flash-preview",
+            contents=prompt,
+        )
+
+        return response.text
+
+    except Exception as e:
+        print("GEMINI ERROR:", e)
+        return None
+
+
+# ================= AUTH =================
 def user_login(request):
-    if request.method == 'POST':
-        username= request.POST['username']
-        password= request.POST['password']
-
-        user = authenticate (request, username=username, password=password)
-        if user is not None:
+    if request.method == "POST":
+        user = authenticate(
+            request,
+            username=request.POST.get("username"),
+            password=request.POST.get("password"),
+        )
+        if user:
             login(request, user)
-            return redirect('/')
-        else:
-            error_message ="Invalid username or password"
-            return render(request, 'login.html',{'error_message':error_message})
-    return render(request, 'login.html')
+            return redirect("/")
+        return render(request, "login.html", {"error": "Invalid credentials"})
+
+    return render(request, "login.html")
+
 
 def user_signup(request):
-    if request.method =='POST':
-        username= request.POST['username']
-        email= request.POST['email']
-        password= request.POST['password']
-        repeatPassword= request.POST['repeatPassword']
+    if request.method == "POST":
+        User.objects.create_user(
+            username=request.POST.get("username"),
+            password=request.POST.get("password"),
+        )
+        return redirect("/login/")
 
-        if password == repeatPassword:
-            try:
-                user = User.objects.create_user(username, email, password)
-                user.save()
-                login(request, user)
-                return redirect('/')
-            except:
-                error_message = 'Error creating account'
-                return render(request,'signup.html',{'error_message':error_message})
-        else:
-            error_message='Passwor do not match'
-            return render(request,'signup.html',{'error_message':error_message})
-        
-    return render(request, 'signup.html')
+    return render(request, "signup.html")
+
 
 def user_logout(request):
     logout(request)
-    return redirect('/')
-
-
-
+    return redirect("/login/")
