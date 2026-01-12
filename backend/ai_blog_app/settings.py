@@ -32,12 +32,14 @@ DEBUG = False
 
 ALLOWED_HOSTS = [
     ".up.railway.app",
+    ".vercel.app",
     "localhost",
     "127.0.0.1",
 ]
 
 CSRF_TRUSTED_ORIGINS = [
     "https://*.up.railway.app",
+    "https://your-vercel-app.vercel.app",
 ]
 
 CSRF_COOKIE_SECURE = True
