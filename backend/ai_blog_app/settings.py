@@ -27,19 +27,24 @@ load_dotenv(BASE_DIR/ ".env")
 SECRET_KEY = os.getenv("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# DEBUG = True
+DEBUG = False
 
-# ALLOWED_HOSTS = []
 ALLOWED_HOSTS = [
+    ".up.railway.app",
     "localhost",
     "127.0.0.1",
-    ".up.railway.app",
 ]
 
-# ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "").split(",")
 CSRF_TRUSTED_ORIGINS = [
-    "https://ai-blog-generator-production-1d68.up.railway.app",
+    "https://*.up.railway.app",
 ]
+
+CSRF_COOKIE_SECURE = True
+SESSION_COOKIE_SECURE = True
+
+
+# ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "").split(",")
 
 
 # Application definition
