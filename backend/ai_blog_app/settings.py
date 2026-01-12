@@ -37,6 +37,9 @@ ALLOWED_HOSTS = [
 ]
 
 # ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "").split(",")
+CSRF_TRUSTED_ORIGINS = [
+    "https://ai-blog-generator-production-1d68.up.railway.app",
+]
 
 
 # Application definition
